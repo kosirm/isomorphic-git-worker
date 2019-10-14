@@ -1,0 +1,65 @@
+<div>
+	<input id="repository" type="text" style="width: 50em" title="Tip: enter a private repo URL to see the credentialManager plugin prompt for a password.">
+  <button type="button" id="cloneButton">Clone</button>
+</div>
+<output id="log" style="white-space: pre; font-family: monospace;"></output>
+
+<script src="https://unpkg.com/magic-portal"></script>
+<script>
+  
+let worker = new Worker("./worker.js")
+const portal = new MagicPortal(worker)
+console.log(portal)
+worker.addEventListener('message', ({data}) => console.log(data))
+
+// 'emitter' plugin
+const emitter = {
+  async emit (event, message) {
+    if (event === 'message') {
+      document.getElementById('log').textContent += message + '\n';
+    }
+  }
+}
+portal.set('emitter', emitter, {void: ['emit']})
+
+// 'credentialManager' plugin
+const credentialManager = {
+  async fill({ url }) {
+    let username = window.prompt("Username:")
+    let password = window.prompt("Password:")
+    return { username, password }
+  },
+  async approved({ url, auth }) {
+    return
+  },
+  async rejected({ url, auth }) {
+    window.alert('Authentication rejected')
+    return
+  }
+}
+portal.set('credentialManager', credentialManager, {void: ['approved', 'rejected']})
+
+;(async () => {
+  const git = await portal.get('git')
+
+  document.getElementById('log').textContent += 'ready\n';
+  document.getElementById('repository').value = 'https://github.com/isomorphic-git/isomorphic-git'
+  document.getElementById('cloneButton').addEventListener('click', async () => {
+    document.getElementById('log').textContent = '';
+    await git.clone({
+      dir: '.',
+      corsProxy: 'https://cors.isomorphic-git.org',
+      url: document.getElementById('repository').value,
+      singleBranch: true,
+      depth: 100
+    })
+    let branches = await git.listBranches({ dir: '.', remote: 'origin' })
+    console.log('branches', branches)
+    document.getElementById('log').textContent += 'branches ' + branches + '\n';
+  })
+
+  window.git = git;
+  window.worker = worker;
+  console.log(git);
+})();
+</script>
